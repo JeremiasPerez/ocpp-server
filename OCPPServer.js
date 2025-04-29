@@ -10,8 +10,11 @@ class OCPPServer {
         })
 
         this._clients = []
+        this._lastTransactionId = 0;
+        this._currentTransactionIdByClient = {}
     }
     async init() {
+        let that = this
         this._server.auth((accept, reject, handshake) => {
             // accept the incoming client
             accept({
@@ -22,6 +25,7 @@ class OCPPServer {
 
         this._server.on('client', async (client) => {
             this._clients.push(client)
+            this._currentTransactionIdByClient[client.identity] = {}
 
             console.log(`${client.session.sessionId} connected!`) // `XYZ123 connected!`
 
@@ -53,29 +57,78 @@ class OCPPServer {
                 return {}
             })
 
+            // create a specific handler for handling StartTransaction requests
+            client.handle('StartTransaction', ({params}) => {
+                console.log(`Server got StartTransaction from ${client.identity}:`, params)
+                let transactionId = that._lastTransactionId
+                this._currentTransactionIdByClient[client.identity][params.connectorId] = transactionId
+                that._lastTransactionId++
+                return {
+                    transactionId: transactionId,
+                    idTagInfo: {
+                        status: 'Accepted'
+                    }
+                }
+            })
+
+            // create a specific handler for handling StartTransaction requests
+            client.handle('StopTransaction', ({params}) => {
+                console.log(`Server got StopTransaction from ${client.identity}:`, params)
+                return {
+                    idTagInfo: {
+                        status: 'Accepted'
+                    }
+                }
+            })
+
             // create a wildcard handler to handle any RPC method
             client.handle(({method, params}) => {
                 // This handler will be called if the incoming method cannot be handled elsewhere.
                 console.log(`Server got ${method} from ${client.identity}:`, params)
 
                 // throw an RPC error to inform the server that we don't understand the request.
-                throw createRPCError("NotImplemented")
+                //throw createRPCError("NotImplemented")
             })
         })
         await this._server.listen(9000)
-        console.log("Server started!")
+        console.log("OCPP Server started!")
     }
-    remoteStartTransaction(identity, idTag, connectorId) {
+    async remoteStartTransaction(identity, idTag, connectorId) {
         console.log(`send remote start to ${identity} in tag ${idTag} to connector ${connectorId}`)
         const cli = this._clients.find((c) => c.identity === identity)
-        if(cli == null) console.log('Charger not found')
-        else cli.call('RemoteStartTransaction',{idTag: idTag, connectorId: connectorId})
+        if(cli == null){
+            console.log('Charger not found')
+            return {status: 'error', message: 'charger not found'}
+        }
+        try{
+            let response = await cli.call('RemoteStartTransaction',{idTag: idTag, connectorId: connectorId})
+            console.log(response)
+            if(response.status != null || response.status == 'Accepted') return {status: 'ok'}
+            else return {status: 'error', message: 'Charger refused transaction'}
+        } catch(error){
+            return {status: 'error', message: error.message}
+        }
+
     }
-    remoteStopTransaction(identity, transactionId) {
-        console.log(`send remote stop to ${identity} of transaction ${transactionId}`)
+    async remoteStopTransaction(identity, connectorId) {
         const cli = this._clients.find((c) => c.identity === identity)
-        if(cli == null) console.log('Charger not found')
-        else cli.call('RemoteStopTransaction',{transactionId: transactionId})
+        if(cli == null){
+            console.log('Charger not found')
+            return {status: 'error', message: 'charger not found'}
+        }
+        let transactionId = this._currentTransactionIdByClient[cli.identity][connectorId]
+        if (transactionId == null) return {status: 'error', message: 'No active transaction in charger'}
+        try{
+            console.log(`send remote stop to ${identity} of transaction ${transactionId}`)
+            let response = await cli.call('RemoteStopTransaction',{transactionId: transactionId})
+            if(response.status == 'Accepted'){
+                delete this._currentTransactionIdByClient[cli.identity][connectorId]
+                return {status: 'ok'}
+            }
+            else return {status: 'error', message: 'Charger rejected the operation'}
+        } catch(error){
+            return {status: 'error', message: error.message}
+        }
     }
 
 }

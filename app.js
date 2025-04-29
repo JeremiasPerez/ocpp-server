@@ -7,16 +7,18 @@ const OCPPServer = require('./OCPPServer')
 const server = new OCPPServer()
 
 server.init().then(() => {
-  app.get('/start', (req, res) => {
-    server.remoteStartTransaction('EVB-P20261797','abc',1)
+  app.post('/start', async (req, res) => {
+    let response = await server.remoteStartTransaction('EVB-P20261797','abc',1)
+    res.json(response)
   })
 
-  app.get('/stop', (req, res) => {
-    server.remoteStopTransaction('EVB-P20261797')
+  app.post('/stop', async (req, res) => {
+    let response = await server.remoteStopTransaction('EVB-P20261797',1)
+    res.json(response)
   })
 
   app.listen(port, () => {
-    console.log(`Server listening on port ${port}`)
+    console.log(`HTTP Server listening on port ${port}`)
   })
 
 })
