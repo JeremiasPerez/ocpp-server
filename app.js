@@ -8,6 +8,7 @@ const server = new OCPPServer()
 
 server.init().then(() => {
   app.post('/start', async (req, res) => {
+    console.log("start received")
     let response = await server.remoteStartTransaction('EVB-P20261797','abc',1)
     res.json(response)
   })

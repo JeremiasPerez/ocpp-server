@@ -117,7 +117,9 @@ class OCPPServer {
             return {status: 'error', message: 'charger not found'}
         }
         let transactionId = this._currentTransactionIdByClient[cli.identity][connectorId]
-        if (transactionId == null) return {status: 'error', message: 'No active transaction in charger'}
+        if (transactionId == null){
+            return {status: 'error', message: 'No active transaction in charger'}
+        }
         try{
             console.log(`send remote stop to ${identity} of transaction ${transactionId}`)
             let response = await cli.call('RemoteStopTransaction',{transactionId: transactionId})
