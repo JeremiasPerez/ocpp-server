@@ -264,7 +264,8 @@
             if (c == 1) {
               var hb_interval = handleData(ddata);
               sessionStorage.setItem("Configuration", hb_interval);
-              startHB(hb_interval * 1000);
+              //startHB(hb_interval * 1000);
+              startHB(10000)
             }
 
             if (ddata[0] === 3) {
